@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>세종시 거주지/대피소 지도</title>
+  <style>
+    html, body {
+      margin: 0; padding: 0; height: 100%; width: 100%;
+      font-family: 'Arial', sans-serif; background: #f5f5f5;
+    }
+    .app-container {
+      width: 100%; max-width: 430px; height: 100%;
+      margin: 0 auto; position: relative; display: flex; flex-direction: column;
+    }
+    #map {
+      width: 100%;
+      height: calc(100% - 40px);
+    }
+    .bottom-controls {
+      position: absolute;
+      top: 55px;
+      left: 70%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 6px;
+      z-index: 999;
+      background: rgba(255,255,255,0.9);
+      padding: 8px;
+      border-radius: 30px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+      align-items: center;
+    }
+    .filter-controls {
+      position: absolute;
+      top: 23%;
+      right: 10px;
+      transform: translateY(-50%);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      z-index: 999;
+      background: rgba(255,255,255,0.9);
+      padding: 8px;
+      border-radius: 10px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+    }
+    .btn {
+      background-color: #FFFFB5;
+      border: none;
+      padding: 8px 14px;
+      font-size: 13px;
+      border-radius: 20px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+      cursor: pointer;
+      color: #333;
+      font-weight: bold;
+      transition: background-color 0.2s ease;
+    }
+    .btn:hover { background-color: #e6e68a; }
+    .search-input {
+      padding: 8px 12px;
+      border: 1px solid #ccc;
+      border-radius: 20px;
+      font-size: 14px;
+      outline: none;
+      width: 160px;
+    }
+  </style>
+
+  <script>
+    let map, activeInfoWindow = null;
+    let staticMarkers = [];
+    let visibleMarkers = [];
+    let userPosition = null;
+    let userMarker = null;
+
+    function initMap() {
+      const shelterIcon = { url: "user.png", scaledSize: new google.maps.Size(32, 40), anchor: new google.maps.Point(16, 32) };
+      const housingIcon = { url: "sh.png", scaledSize: new google.maps.Size(32, 32), anchor: new google.maps.Point(16, 32) };
+      const userIcon = { url: "pin.png", scaledSize: new google.maps.Size(32, 32), anchor: new google.maps.Point(16, 32) };
+
+      const sejongCenter = { lat: 36.4801, lng: 127.2890 };
+      map = new google.maps.Map(document.getElementById("map"), { zoom: 13, center: sejongCenter });
+
+      const markerData = [
+        { lat: 36.611004, lng: 127.299552, title: "세종고등학교 운동장", phone: "044-320-6703", type: "shelter" },
+        { lat: 36.607534, lng: 127.287366, title: "세종여자고등학교 운동장", phone: "044-862-1082", type: "shelter" },
+                { lat: 36.605553, lng: 127.298237, title: "조치원교동초등학교 운동장", phone: "044-863-6474", type: "shelter" },
+        { lat: 36.596667, lng: 127.29359, title: "조치원대동초등학교 운동장", phone: "044-861-4603", type: "shelter" },
+        { lat: 36.601193, lng: 127.304793, title: "조치원명동초등학교 운동장", phone: "044-865-2245", type: "shelter" },
+        { lat: 36.603613, lng: 127.288721, title: "조치원신봉초등학교 운동장, phone: “044-902-1400", type: "shelter" },
+        { lat: 36.606489, lng: 127.29805, title: "세종중학교 운동장", phone: "044-864-2071", type: "shelter" },
+        { lat: 36.611949, lng: 127.299297, title: "조치원중학교 운동장", phone: "044-320-6182", type: "shelter" },
+        { lat: 36.5929679, lng: 127.293281, title: "조치원청사 주차장", phone: "044-300-3057", type: "shelter" },
+        { lat: 36.606673, lng: 127.300041, title: "수원지 근린공원", phone: "044-301-3633", type: "shelter" },
+        { lat: 36.603196, lng: 127.30011, title: "제1호 어린이공원", phone: "044-301-3633", type: "shelter" },
+        { lat: 36.59505, lng: 127.300568, title: "제3호 어린이공원", phone: "044-301-3633", type: "shelter" },
+        { lat: 36.615831, lng: 127.2855795, title: "세종e편한세상 아파트_전동지하", phone: "x", type: "shelter" },
+        { lat: 36.59442215, lng: 127.2900485, title: "신흥주공아파트_전동지하", phone: "x", type: "shelter" },
+        { lat: 36.5916909, lng: 127.2895036, title: "신흥푸르지오아파트 지하", phone: "x", type: "shelter" },
+        { lat: 36.5912769, lng: 127.2905207, title: "자이아파트 지하주차장", phone: "x", type: "shelter" },
+        { lat: 36.5929688, lng: 127.2963913, title: "신동아파밀리에아파트_전동지하", phone: "x", type: "shelter" },
+        { lat: 36.6019601, lng: 127.2982521, title: "행복코아_메가박스", phone: "x", type: "shelter" },
+        { lat: 36.598561, lng: 127.2998659, title: "풍산아파트 지하주차장", phone: "x", type: "shelter" },
+        { lat: 36.6214734, lng: 127.2851443, title: "홍익대 교사A동", phone: "x", type: "shelter" },
+        { lat: 36.61048215, lng: 127.2873681, title: "고려대 학술정보관 지하", phone: "x", type: "shelter" },
+        { lat: 36.585799, lng: 127.287245, title: "세종도원초등학교 운동장", phone: "044-868-7210", type: "shelter" },
+        { lat: 36.5895352, lng: 127.299408, title: "욱일아파트 지하주차장", phone: "x", type: "shelter" },
+        { lat: 36.553991, lng: 127.330383, title: "연동중학교 운동장", phone: "044-864-7021", type: "shelter" },
+        { lat: 36.5599441, lng: 127.326589, title: "연동초등학교 운동장", phone: "044-864-9380", type: "shelter" },
+        { lat: 36.564382, lng: 127.282366, title: "연봉초등학교 운동장", phone: "044-867-7024", type: "shelter" },
+        { lat: 36.580777, lng: 127.257799, title: "연서중학교 운동장", phone: "044-902-905", type: "shelter" },
+        { lat: 36.582943, lng: 127.254012, title: "연서초등학교 운동장", phone: "044-867-7032", type: "shelter" },
+        { lat: 36.566894, lng: 127.2854166, title: "대원네스트빌아파트", phone: "x", type: "shelter" },
+        { lat: 36.488641, lng: 127.298786, title: "글벗중학교 운동장", phone: "044-999-6905", type: "shelter" },
+        { lat: 36.48727, lng: 127.298693, title: "글벗초등학교 운동장", phone: "044-999-5303", type: "shelter" },
+        { lat: 36.482292, lng: 127.301604, title: "소담중학교 운동장", phone: "044-905-221", type: "shelter" },
+        { lat: 36.483132, lng: 127.301305, title: "소담초등학교 운동장", phone: "044-861-7303", type: "shelter" },
+        { lat: 36.486033, lng: 127.295344, title: "숲바람 수변공원", phone: "044-860-7927", type: "shelter" },
+        { lat: 36.477695, lng: 127.293328, title: "보람중학교 운동장", phone: "044-999-6403", type: "shelter" },
+        { lat: 36.476226, lng: 127.284935, title: "여울초등학교 운동장", phone: "044-999-6171", type: "shelter" },
+        { lat: 36.482464, lng: 127.292184, title: "금강 수변공원", phone: "044-860-7927", type: "shelter" },
+        { lat: 36.474308, lng: 127.282299, title: "아울뜰 근린공원", phone: "044-301-3622", type: "shelter" },
+        { lat: 36.472509, lng: 127.274218, title: "두레뜰 근린공원", phone: "044-301-3623", type: "shelter" },
+        { lat: 36.469523, lng: 127.27544, title: "대평뜰 근린공원", phone: "044-860-7927", type: "shelter" },
+        { lat: 36.4698, lng: 127.279518, title: "대평초등학교 운동장", phone: "044-902-1420", type: "shelter" },
+        { lat: 36.470466, lng: 127.280291, title: "금호중학교 운동장", phone: "044-850-404", type: "shelter" },
+        { lat: 36.472391, lng: 127.253835, title: "미르초등학교 운동장", phone: "044-998-2703", type: "shelter" },
+        { lat: 36.479116, lng: 127.258524, title: "참샘초등학교 운동장", phone: "044-902-3702", type: "shelter" },
+        { lat: 36.478459, lng: 127.252783, title: "한솔고등학교 운동장", phone: "044-410-4102", type: "shelter" },
+        { lat: 36.476156, lng: 127.254892, title: "한솔중학교 운동장", phone: "044-868-1731", type: "shelter" },
+        { lat: 36.477556, lng: 127.252513, title: "한솔초등학교 운동장", phone: "044-410-4300", type: "shelter" },
+        { lat: 36.47966, lng: 127.250893, title: "아침뜰 근린공원_1", phone: "044-301-3633", type: "shelter" },
+        { lat: 36.476758, lng: 127.254845, title: "아침뜰 근린공원_2", phone: "044-301-3633", type: "shelter" },
+        { lat: 36.479924, lng: 127.260304, title: "초롱꽃 어린이공원", phone: "044-301-3633", type: "shelter" },
+        { lat: 36.475814, lng: 127.251058, title: "나리꽃 어린이공원", phone: "044-301-3633", type: "shelter" },
+        { lat: 36.48767, lng: 127.24336, title: "가득초등학교 운동장", phone: "044-999-7605", type: "shelter" },
+        { lat: 36.486948, lng: 127.25261, title: "새뜸중학교 운동장", phone: "044-999-5905", type: "shelter" },
+        { lat: 36.485716, lng: 127.253424, title: "새뜸초등학교 운동장", phone: "044-999-7405", type: "shelter" },
+        { lat: 36.486538, lng: 127.248992, title: "새롬고등학교 운동장", phone: "044-999-6300", type: "shelter" },
+        { lat: 36.480935, lng: 127.249657, title: "새롬중학교 운동장", phone: "044-998-2656", type: "shelter" },
+        { lat: 36.485583, lng: 127.249407, title: "새롬초등학교 운동장", phone: "044-999-5606", type: "shelter" },
+        { lat: 36.49585, lng: 127.253233, title: "2-1 우수저류지", phone: "044-301-3534", type: "shelter" },
+        { lat: 36.49347, lng: 127.251787, title: "새움초등학교 운동장", phone: "044-902-3205", type: "shelter" },
+        { lat: 36.496931, lng: 127.255425, title: "세종대성고등학교 운동장", phone: "044-860-3700", type: "shelter" },
+        { lat: 36.498246, lng: 127.255105, title: "어진중학교 운동장", phone: "044-410-799", type: "shelter" },
+        { lat: 36.499942, lng: 127.268983, title: "호수 제2주차장", phone: "044-860-7992", type: "shelter" },
+        { lat: 36.498325, lng: 127.261712, title: "어진뜰 근린공원", phone: "044-301-3622", type: "shelter" },
+        { lat: 36.443471, lng: 127.289237, title: "감성초등학교 운동장", phone: "044-866-8892", type: "shelter" },
+        { lat: 36.472349, lng: 127.288226, title: "금남초등학교 운동장", phone: "044-866-9715", type: "shelter" },
+        { lat: 36.465568, lng: 127.281373, title: "대평전통시장 주차장", phone: "044-300-4133", type: "shelter" },
+        { lat: 36.4806157, lng: 127.2608701, title: "첫마을2단지아파트_전동지하", phone: "x", type: "shelter" },
+        { lat: 36.4762047, lng: 127.249566, title: "첫마을5단지아파트_전동지하", phone: "x", type: "shelter" },
+        { lat: 36.4781471, lng: 127.2612587, title: "첫마을7단지아파트_전동지하", phone: "x", type: "shelter" },
+        { lat: 36.47928395, lng: 127.2545741, title: "한솔동주민센터", phone: "x", type: "shelter" },
+        { lat: 36.4608718, lng: 127.2798573, title: "두진리버빌아파트_전동지하", phone: "x", type: "shelter" },
+        { lat: 36.496035, lng: 127.2640853, title: "대우푸르지오1차오피스텔_전동지하", phone: "x", type: "shelter" },
+        { lat: 36.4801176, lng: 127.2891887, title: "세종시청 지하주차장", phone: "x", type: "shelter" },
+        { lat: 36.4809399, lng: 127.2583558, title: "첫마을 1단지 아파트 민방위 대피시설[공공용]", phone: "x", type: "shelter" },
+        { lat: 36.47932145, lng: 127.26021, title: "첫마을3단지아파트_전동지하", phone: "x", type: "shelter" },
+        { lat: 36.4802969, lng: 127.2511052, title: "첫마을4단지아파트_전동지하", phone: "x", type: "shelter" },
+        { lat: 36.473069, lng: 127.2520131, title: "첫마을6단지아파트_전동지하", phone: "x", type: "shelter" },
+        { lat: 36.4835322, lng: 127.3169455, title: "새샘마을 2단지 아파트", phone: "x", type: "shelter" },
+        { lat: 36.49566435, lng: 127.2669788, title: "세종 푸르지오시티 2차_전동지하", phㄴone: "x", type: "shelter" },
+        { lat: 36.4987114, lng: 127.2555404, title: "세종시 모닝시티 1차_전동지하", phone: "x", type: "shelter" },
+        { lat: 36.4860662, lng: 127.25684, title: "새롬종합복지센터", phone: "x", type: "shelter" },
+        { lat: 36.4871247, lng: 127.2498578, title: "새뜸마을 6단지", phone: "x", type: "shelter" },
+        { lat: 36.485123, lng: 127.2502403, title: "새뜸마을 11단지", phone: "x", type: "shelter" },
+        { lat: 36.4906656, lng: 127.2544071, title: "호려울마을6단지아파트 지하주차장", phone: "x", type: "shelter" },
+        { lat: 36.4774123, lng: 127.2958216, title: "새샘마을 3단지 아파트", phone: "x", type: "shelter" },
+        { lat: 36.4851561, lng: 127.296054, title: "새샘마을 5단지 아파트", phone: "x", type: "shelter" },
+        { lat: 36.4812121, lng: 127.3011652, title: "새샘마을 6단지 아파트", phone: "x", type: "shelter" },
+        { lat: 36.48339006, lng: 127.3038922, title: "해들마을1_아", phone: "x", type: "shelter" },
+        { lat: 36.4714902, lng: 127.2768963, title: "해들마을4_아", phone: "x", type: "shelter" },
+        { lat: 36.4717043, lng: 127.2798353, title: "가온마을12단지 아파트", phone: "x", type: "shelter" },
+        { lat: 36.49420335, lng: 127.2534948, title: "가온마을8단지 아파트", phone: "x", type: "shelter" },
+        { lat: 36.49529485, lng: 127.2516754, title: "소담동복합커뮤니티센터", phone: "x", type: "shelter" },
+        { lat: 36.4840792, lng: 127.300366, title: "다정동 복합커뮤니티", phone: "x", type: "shelter" },
+        { lat: 36.4943831, lng: 127.2504148, title: "대평동행정복지센터", phone: "x", type: "shelter" },
+        { lat: 36.4709522, lng: 127.2791743, title: "수루배마을 5단지 아파트", phone: "x", type: "shelter" },
+        { lat: 36.4949951, lng: 127.311895, title: "연남초등학교 운동장", phone: "044-863-4504", type: "shelter" },
+        { lat: 36.543594, lng: 127.27837, title: "도란뜰 근린공원", phone: "044-430-13633", type: "shelter" },
+        { lat: 36.493954, lng: 127.248141, title: "새뜸마을 5단지", phone: "x", type: "shelter" },
+        { lat: 36.4900281, lng: 127.2499262, title: "가온마을1단지 아파트", phone: "x", type: "shelter" },
+        { lat: 36.4936459, lng: 127.246804, title: "수루배마을 2단지 아파트", phone: "x", type: "shelter" },
+        { lat: 36.4960173, lng: 127.3099361, title: "전의중학교 운동장", phone: "044-863-3201", type: "shelter" },
+        { lat: 36.680437, lng: 127.202847, title: "전의초등학교 운동장", phone: "044-863-1450", type: "shelter" },
+        { lat: 36.6826417, lng: 127.2047967, title: "전의면 늘푸른성호_아", phone: "x", type: "shelter" },
+        { lat: 36.522556, lng: 127.248592, title: "세종과학예술영재학교 운동장", phone: "044-903-1015", type: "shelter" },
+        { lat: 36.543478, lng: 127.25237, title: "수왕초등학교 운동장", phone: "044-863-4164", type: "shelter" },
+        { lat: 36.526722, lng: 127.365346, title: "부강중학교 운동장", phone: "044-275-4081", type: "shelter" },
+        { lat: 36.527098, lng: 127.366638, title: "부강초등학교 운동장", phone: "044-902-1672", type: "shelter" },
+        { lat: 36.526074, lng: 127.382781, title: "세종하이텍고등학교 운동장", phone: "044-275-4092", type: "shelter" },
+        { lat: 36.5310329, lng: 127.3650132, title: "대신하나로아파트 지하주차장", phone: "x", type: "shelter" },
+        { lat: 36.656698, lng: 127.265795, title: "전동초등학교 운동장", phone: "044-863-1209", type: "shelter" },
+        { lat: 36.49108, lng: 127.24675, title: "새움중학교 운동장", phone: "044-999-6504", type: "shelter" },
+        { lat: 36.496364, lng: 127.245157, title: "한결초등학교 운동장", phone: "044-902-3405", type: "shelter" },
+        { lat: 36.493409, lng: 127.24433, title: "다정초등학교 운동장", phone: "044-902-3805", type: "shelter" },
+        { lat: 36.493715, lng: 127.245655, title: "다정중학교 운동장", phone: "044-902-1805", type: "shelter" },
+        { lat: 36.5094, lng: 127.246571, title: "다빛초등학교 운동장", phone: "044-903-3500", type: "shelter" },
+        { lat: 36.5046, lng: 127.246005, title: "종촌중학교 운동장", phone: "044-903-2109", type: "shelter" },
+        { lat: 36.50278, lng: 127.245541, title: "제천뜰 근린공원", phone: "044-903-3220", type: "shelter" },
+        { lat: 36.503468, lng: 127.248224, title: "가락초등학교 운동장", phone: "044-301-3613", type: "shelter" },
+        { lat: 36.515584, lng: 127.230517, title: "고운고등학교 운동장", phone: "044-903-1200", type: "shelter" },
+        { lat: 36.51007, lng: 127.232963, title: "고운중학교 운동장", phone: "044-903-2304", type: "shelter" },
+        { lat: 36.504258, lng: 127.236707, title: "고운초등학교 운동장", phone: "044-903-3321", type: "shelter" },
+        { lat: 36.504236, lng: 127.23674, title: "두루고등학교 운동장", phone: "044-903-4306", type: "shelter" },
+        { lat: 36.516383, lng: 127.227496, title: "두루중학교 운동장", phone: "044-903-2204", type: "shelter" },
+        { lat: 36.518172, lng: 127.238568, title: "두루초등학교 운동장", phone: "044-903-3116", type: "shelter" },
+        { lat: 36.519414, lng: 127.238525, title: "온빛초등학교 운동장", phone: "044-903-2701", type: "shelter" },
+        { lat: 36.514836, lng: 127.240517, title: "으뜸초등학교 운동장", phone: "044-903-3700", type: "shelter" },
+        { lat: 36.509682, lng: 127.231161, title: "나래초등학교 운동장", phone: "044-903-2507", type: "shelter" },
+        { lat: 36.508946, lng: 127.246573, title: "아름고등학교 운동장", phone: "044-234-5678", type: "shelter" },
+        { lat: 36.51308, lng: 127.24506, title: "아름중학교 운동장", phone: "044-867-8062", type: "shelter" },
+        { lat: 36.514225, lng: 127.245138, title: "늘봄초등학교 운동장", phone: "044-902-6464", type: "shelter" },
+        { lat: 36.514705, lng: 127.254815, title: "장기중학교 운동장", phone: "044-902-1101", type: "shelter" },
+        { lat: 36.494088, lng: 127.201703, title: "장기초등학교 운동장", phone: "044-903-3430", type: "shelter" },
+        { lat: 36.496197, lng: 127.205788, title: "한뜰마을2단지아파트_전동지하", phone: "044-998-3147", type: "shelter" },
+        { lat: 36.5178416, lng: 127.2646255, title: "아름동주민센터", phone: "044-858-4066", type: "shelter" },
+        { lat: 36.512175, lng: 127.2468972, title: "범지기마을1단지아파트_전동지하", phone: "x", type: "shelter" },
+        { lat: 36.5069692, lng: 127.2541416, title: "가락마을3단지아파트_전동지하", phone: "x", type: "shelter" },
+        { lat: 36.5174069, lng: 127.2415304, title: "가락마을17단지아파트_전동지하", phone: "x", type: "shelter" },
+        { lat: 36.518064, lng: 127.2295818, title: "종촌동주민센터", phone: "x", type: "shelter" },
+        { lat: 36.5047141, lng: 127.2473286, title: "도램마을 10단지_전동지하", phone: "x", type: "shelter" },
+        { lat: 36.5135704, lng: 127.2654681, title: "범지기마을3단지아파트_전동지하", phone: "x", type: "shelter" },
+        { lat: 36.5165662, lng: 127.2455899, title: "범지기마을11단지아파트_전동지하", phone: "x", type: "shelter" },
+        { lat: 36.5119228, lng: 127.2429938, title: "가재마을 1단지 아파트", phone: "x", type: "shelter" },
+        { lat: 36.5018581, lng: 127.245064, title: "가락마을8단지아파트", phone: "x", type: "shelter" },
+        { lat: 36.5161021, lng: 127.2393511, title: "가온마을2단지 아파트", phone: "x", type: "shelter" },
+        { lat: 36.4958948, lng: 127.2430015, title: "가온마을5단지 아파트", phone: "x", type: "shelter" },
+        { lat: 36.4983865, lng: 127.2449209, title: "가온마을10단지 아파트", phone: "x", type: "shelter" },
+        { lat: 36.4967134, lng: 127.2056413, title: "장군면사무소", phone: "x", type: "shelter" },
+        { lat: 36.4967134, lng: 127.2056413, title: "가온마을3단지 아파트", phone: "x", type: "shelter" },
+        { lat: 36.4963823, lng: 127.2437382, title: "가온마을4단지 아파트", phone: "x", type: "shelter" },
+        { lat: 36.4959994, lng: 127.247432, title: "가온마을9단지 아파트", phone: "x", type: "shelter" },
+        { lat: 36.515753, lng: 127.263469, title: "보람고등학교 운동장", phone: "044-999-7120", type: "shelter" },
+        { lat: 36.503075, lng: 127.256297, title: "연양초등학교 운동장", phone: "044-998-4205", type: "shelter" },
+        { lat: 36.502707, lng: 127.241825, title: "종촌초등학교 운동장", phone: "044-903-3607", type: "shelter" },
+        { lat: 36.525358, lng: 127.242948, title: "세종누리학교 운동장", phone: "044-410-2117", type: "shelter" },
+        { lat: 36.521736, lng: 127.246843, title: "세종국제고등학교 운동장", phone: "044-410-505", type: "shelter" },
+        { lat: 36.514553, lng: 127.251543, title: "아름초등학교 운동장", phone: "044-998-1845", type: "shelter" },
+        { lat: 36.514134, lng: 127.263795, title: "도담고등학교 운동장", phone: "044-410-308", type: "shelter" },
+        { lat: 36.515547, lng: 127.263469, title: "도담중학교 운동장", phone: "044-410-205", type: "shelter" },
+        { lat: 36.509414, lng: 127.268585, title: "양지고등학교 운동장", phone: "044-903-2004", type: "shelter" },
+        { lat: 36.50834, lng: 127.26878, title: "양지중학교 운동장", phone: "044-903-3019", type: "shelter" },
+        { lat: 36.515319, lng: 127.259304, title: "도담 싱싱장터 주차장", phone: "044-866-4905", type: "shelter" },
+        { lat: 36.5110949, lng: 127.2584363, title: "도램마을8단지아파트_전동지하", phone: "x", type: "shelter" },
+        { lat: 36.51312848, lng: 127.2565605, title: "도램마을2단지아파트_전동지하", phone: "x", type: "shelter" },
+        { lat: 36.501757, lng: 127.2564176, title: "어진동 복합커뮤니티센터", phone: "x", type: "shelter" },
+        { lat: 36.511114, lng: 127.2638514, title: "도램마을15단지아파트_전동지하", phone: "x", type: "shelter" },
+        { lat: 36.5200288, lng: 127.2411439, title: "가락마을11단지 아파트_전동지하", phone: "x", type: "shelter" },
+        { lat: 36.50261155, lng: 127.2466263, title: "도램마을 5단지_전동지하", phone: "x", type: "shelter" },
+        { lat: 36.5131136, lng: 127.255555, title: "도램마을 7단지_전동지하", phone: "x", type: "shelter" },
+        { lat: 36.5096226, lng: 127.2597027, title: "가락마을19단지", phone: "x", type: "shelter" },
+        { lat: 36.52266411, lng: 127.2343187, title: "소담고등학교 운동장", phone: "044-902-2200", type: "shelter" },
+        { lat: 36.4826, lng: 127.302927, title: "국토연구원", phone: "x", type: "shelter" },
+        { lat: 36.49164615, lng: 127.3008461, title: "호려울마을10단지아파트 지하주차장", phone: "x", type: "shelter" },
+        { lat: 36.5012516, lng: 127.3115165, title: "수루배마을 1단지 아파트", phone: "x", type: "shelter" },
+        { lat: 36.498499, lng: 127.313568, title: "도담동주민센터", phone: "x", type: "shelter" },
+        { lat: 36.5155694, lng: 127.2616048, title: "소정초등학교 운동장", phone: "044-566-6064", type: "shelter" },
+        { lat: 36.721112, lng: 127.159093, title: "신창무궁화아파트", phone: "x", type: "shelter" },
+        { lat: 36.7203756, lng: 127.1530909, title: "연세초등학교 운동장", phone: "044-860-6504", type: "shelter" },
+        { lat: 36.505406, lng: 127.271848, title: "범지기마을8단지아파트_전동지하", phone: "x", type: "shelter" },
+        { lat: 36.5179199, lng: 127.2521122, title: "도램마을 13단지_전동지하", phone: "x", type: "shelter" },
+        { lat: 36.513634, lng: 127.2629314, title: "가재마을11단지아파트_전동지하", phone: "x", type: "shelter" },
+        { lat: 36.5025988, lng: 127.2601268, title: "의랑초등학교 운동장", phone: "044-852-6872", type: "shelter" },
+        { lat: 36.550339, lng: 127.190625, title: "쌍류초등학교 운동장", phone: "044-863-1929", type: "shelter" },
+        { lat: 36.599359, lng: 127.209963, title: "새뜸마을 1단지", phone: "x", type: "shelter" },
+        { lat: 36.4826313, lng: 127.2481285, title: "한뜰마을 3단지_전동지하", phone: "x", type: "shelter" },
+        { lat: 36.511926, lng: 127.262592, title: "보람초등학교 운동장", phone: "044-903-375", type: "shelter" },
+        { lat: 36.511755, lng: 127.262433, title: "도담초등학교 운동장", phone: "044-410-103", type: "shelter" },
+        { lat: 36.48543, lng: 127.2455, title: "가득초등학교", phone: "044-999-7605", type: "housing", capacity: 166 },
+        { lat: 36.515439, lng: 127.230894, title: "가락초등학교", phone: "044-903-1272", type: "housing", capacity: 691 },
+        { lat: 36.442172, lng: 127.290998, title: "감성리 경로당", phone: "044-301-5515", type: "housing", capacity: 68 },
+        { lat: 36.443439, lng: 36.443439, title: "감성초등학교", phone: "044-866-8892", type: "housing", capacity: 594 },
+        { lat: 36.604844, lng: 127.258201, title: "고복1리마을회관", phone: "044-301-5743", type: "housing", capacity: 48 },
+        { lat: 36.510086, lng: 127.232958, title: "고운고등학교", phone: "044-903-2304", type: "housing", capacity: 618 },
+        { lat: 36.519785, lng: 127.236626, title: "고운동 복합커뮤니티센터", phone: "044-301-6614", type: "housing", capacity: 869 },
+        { lat: 36.505369, lng: 127.237658, title: "고운중학교", phone: "044-903-3300", type: "housing", capacity: 1241 },
+        { lat: 36.504194, lng: 127.236651, title: "고운초등학교", phone: "044-903-4306", type: "housing", capacity: 854 },
+        { lat: 36.700894, lng: 127.202277, title: "관정1리 군량골경로당", phone: "044-301-5844", type: "housing", capacity: 65 },
+        { lat: 36.6053979, lng: 127.2985403, title: "교동초등학교", phone: "044-902-4800", type: "housing", capacity: 1085 },
+        { lat: 36.575288, lng: 127.265526, title: "국촌2리마을회관", phone: "044-301-5743", type: "housing", capacity: 49 },
+        { lat: 36.488549, lng: 127.298620, title: "글벗중학교", phone: "044-999-6905", type: "housing", capacity: 658 },
+        { lat: 36.487366, lng: 127.298156, title: "글벗초등학교", phone: "044-999-5307", type: "housing", capacity: 641 },
+        { lat: 36.471986, lng: 127.288108, title: "금남초등학교", phone: "044-866-9715", type: "housing", capacity: 693 },
+        { lat: 36.438446, lng: 127.208697, title: "금암리 마을회관", phone: "044-301-5644", type: "housing", capacity: 151 },
+        { lat: 36.442338, lng: 127.315092, title: "금천1리 경로당", phone: "044-301-5515", type: "housing", capacity: 75 },
+        { lat: 36.470349, lng: 127.280356, title: "금호중학교", phone: "044-850-0406", type: "housing", capacity: 840 },
+{ lat: 36.508974, lng: 127.246780, title: "나래초등학교", phone: "044-902-8304", type: "housing", capacity: 500 },
+{ lat: 36.488886, lng: 127.264873, title: "나성동 복합커뮤니티센터", phone: "044-301-7615", type: "housing", capacity: 711 },
+{ lat: 36.598397, lng: 127.301837, title: "남리마을회관", phone: "044-301-5172", type: "housing", capacity: 70 },
+{ lat: 36.553040, lng: 127.324783, title: "내판4리 마을회관", phone: "044-301-5344", type: "housing", capacity: 72 },
+{ lat: 36.544247, lng: 127.258167, title: "눌왕리마을회관", phone: "044-301-5242", type: "housing", capacity: 50 },
+{ lat: 36.513915, lng: 127.254830, title: "늘봄초등학교", phone: "044-903-3440", type: "housing", capacity: 760 },
+{ lat: 36.500371, lng: 127.243987, title: "다빛초등학교", phone: "044-903-3572", type: "housing", capacity: 780 },
+{ lat: 36.494375, lng: 127.250194, title: "다정동 복합커뮤니티센터", phone: "044-301-7121", type: "housing", capacity: 715 },
+{ lat: 36.639661, lng: 127.176155, title: "달성학구 경로당", phone: "044-301-5844", type: "housing", capacity: 44 },
+{ lat: 36.624059, lng: 127.173357, title: "달전1리 경로당", phone: "044-301-5844", type: "housing", capacity: 55 },
+{ lat: 36.59559, lng: 127.2954, title: "대동초등학교", phone: "044-862-4605", type: "housing", capacity: 1211 },
+{ lat: 36.478759, lng: 127.344105, title: "대박리경로당", phone: "044-301-5515", type: "housing", capacity: 78 },
+{ lat: 36.474340834171, lng: 127.27341647562, title: "대평동 복합커뮤니티센터", phone: "044-301-6914", type: "housing", capacity: 1731 },
+{ lat: 36.497012, lng: 127.207355, title: "도계리 마을회관", phone: "044-301-5644", type: "housing", capacity: 319 },
+{ lat: 36.513485095708, lng: 127.26406421089, title: "도담고등학교", phone: "044-410-0307", type: "housing", capacity: 903 },
+{ lat: 36.515662, lng: 127.261832, title: "도담동 복합커뮤니티센터", phone: "044-301-6219", type: "housing", capacity: 1722 },
+{ lat: 36.515549, lng: 127.263558, title: "도담중학교", phone: "044-410-0204", type: "housing", capacity: 897 },
+{ lat: 36.511699, lng: 127.262790, title: "도담초등학교", phone: "044-410-0182", type: "housing", capacity: 793 },
+{ lat: 36.443836, lng: 127.278213, title: "도암1리 경로당", phone: "044-301-5515", type: "housing", capacity: 80 },
+{ lat: 36.516405, lng: 127.227460, title: "두루고등학교", phone: "044-903-2205", type: "housing", capacity: 624 },
+{ lat: 36.518353, lng: 36.518353, title: "두루중학교", phone: "044-903-3122", type: "housing", capacity: 641 },
+{ lat: 36.519648, lng: 127.238570, title: "두루초등학교", phone: "044-903-2709", type: "housing", capacity: 834 },
+{ lat: 36.509030, lng: 127.386181, title: "둥곡1리경로당", phone: "044-301-5442", type: "housing", capacity: 60 },
+{ lat: 36.601165, lng: 127.305126, title: "명동초등학교", phone: "044-865-2245", type: "housing", capacity: 462 },
+{ lat: 36.526393, lng: 127.350550, title: "명학2리 마을회관", phone: "044-301-5344", type: "housing", capacity: 40 },
+{ lat: 36.546636, lng: 127.310763, title: "문주리마을회관", phone: "044-301-5344", type: "housing", capacity: 80 },
+{ lat: 36.664660, lng: 127.219755, title: "미곡1리 마을회관", phone: "044-301-5944", type: "housing", capacity: 80 },
+{ lat: 36.472576719325, lng: 127.25407199443, title: "미르초등학교", phone: "044-960-2906", type: "housing", capacity: 680 },
+{ lat: 36.498979, lng: 127.310693, title: "반곡동 복합커뮤니티센터", phone: "044-301-7314", type: "housing", capacity: 894 },
+{ lat: 36.585758, lng: 127.294525, title: "번암1리 경로당", phone: "044-301-5172", type: "housing", capacity: 50 },
+{ lat: 36.4775397, lng: 127.2840392, title: "보람고등학교", phone: "044-999-7134", type: "housing", capacity: 831 },
+{ lat: 36.478795, lng: 127.290836, title: "보람동 복합커뮤니티센터", phone: "044-301-6719", type: "housing", capacity: 977 },
+{ lat: 36.477811, lng: 127.293289, title: "보람중학교", phone: "044-999-6466", type: "housing", capacity: 725 },
+{ lat: 36.479611, lng: 127.293442, title: "보람초등학교", phone: "044-903-0373", type: "housing", capacity: 822 },
+{ lat: 36.544793, lng: 127.289885, title: "보통1리마을회관", phone: "044-301-5242", type: "housing", capacity: 136 },
+{ lat: 36.684059, lng: 127.266851, title: "봉대리 마을회관", phone: "044-301-5944", type: "housing", capacity: 60 },
+{ lat: 36.499558, lng: 127.222711, title: "봉안리경로당", phone: "010-5458-1223", type: "housing", capacity: 121 },
+{ lat: 36.528628, lng: 127.368155, title: "부강3리 마을회관", phone: "044-301-5442", type: "housing", capacity: 300 },
+{ lat: 36.527663, lng: 36.527663, title: "부강4리 마을회관", phone: "044-301-5442", type: "housing", capacity: 110 },
+{ lat: 36.529932, lng: 127.369421, title: "부강6리 마을회관", phone: "044-301-5442", type: "housing", capacity: 110 },
+{ lat: 36.529729, lng: 127.370905, title: "부강면사무소", phone: "044-301-5442", type: "housing", capacity: 238 },
+{ lat: 36.526976, lng: 127.365337, title: "부강중학교", phone: "044-275-4081", type: "housing", capacity: 1152 },
+{ lat: 36.5267727, lng: 127.3667796, title: "부강초등학교", phone: "044-902-1672", type: "housing", capacity: 848 },
+{ lat: 36.560081, lng: 127.269709, title: "부동리마을회관", phone: "044-301-5743", type: "housing", capacity: 81 },
+{ lat: 36.512134, lng: 127.358020, title: "부용2리 경로당", phone: "044-301-5515", type: "housing", capacity: 75 },
+{ lat: 36.486822, lng: 127.252356, title: "새뜸중학교", phone: "044-999-5905", type: "housing", capacity: 547 },
+{ lat: 36.485556, lng: 127.253557, title: "새뜸초등학교", phone: "044-999-7405", type: "housing", capacity: 660 },
+{ lat: 36.486444, lng: 127.248998, title: "새롬고등학교", phone: "044-999-6300", type: "housing", capacity: 763 },
+{ lat: 36.485262, lng: 127.251905, title: "새롬동 복합커뮤니티센터", phone: "044-301-6819", type: "housing", capacity: 802 },
+{ lat: 36.4867969, lng: 127.2527706, title: "새롬중학교", phone: "044-998-2656", type: "housing", capacity: 594 },
+{ lat: 36.485403, lng: 36.485403, title: "새롬초등학교", phone: "044-999-5608", type: "housing", capacity: 810 },
+{ lat: 36.491161, lng: 127.247269, title: "새음중학교", phone: "044-999-6506", type: "housing", capacity: 658 },
+{ lat: 36.607675, lng: 127.285236, title: "서창2리 두진(아)경로당", phone: "044-301-5172", type: "housing", capacity: 60 },
+{ lat:36.6155800, lng: 127.284541, title: "세종e편한세상아파트경로당", phone: "044-301-5172", type: "housing", capacity: 174 },
+{ lat: 36.609975, lng: 127.299149, title: "세종고등학교", phone: "044-320-6705", type: "housing", capacity: 1071 },
+{ lat: 36.5224750, lng: 127.2490070, title: "세종과학예술영재학교", phone: "044-903-1015", type: "housing", capacity: 581 },
+{ lat: 36.5215283, lng: 127.2469708, title: "세종국제고등학교", phone: "044-410-0506", type: "housing", capacity: 565 },
+{ lat: 36.525648, lng: 127.242439, title: "세종누리학교", phone: "044-410-2117", type: "housing", capacity: 682 },
+{ lat: 36.496961, lng: 127.255455, title: "세종대성고등학교", phone: "044-860-3704", type: "housing", capacity: 629 },
+{ lat: 36.585732, lng: 127.287183, title: "세종도원초등학교", phone: "044-960-8607", type: "housing", capacity: 432 },
+{ lat: 36.526487, lng: 127.382602, title: "세종미래고등학교", phone: "044-275-4092", type: "housing", capacity: 802 },
+{ lat: 36.607335, lng: 127.287310, title: "세종여자고등학교", phone: "044-862-1082", type: "housing", capacity: 396 },
+{ lat: 36.606611, lng: 127.298232, title: "세종중학교", phone: "044-850-6682", type: "housing", capacity: 602 },
+{ lat: 36.4839, lng: 127.3009, title: "소담고등학교", phone: "044-902-2205", type: "housing", capacity: 907 },
+{ lat: 36.48347, lng: 127.29791, title: "소담동 복합커뮤니티센터", phone: "044-301-7016", type: "housing", capacity: 1053 },
+{ lat: 36.482211, lng: 127.301850, title: "소담중학교", phone: "044-905-0225", type: "housing", capacity: 599 },
+{ lat: 36.4833221, lng: 127.3020014, title: "소담초등학교", phone: "044-861-7306", type: "housing", capacity: 909 },
+{ lat: 36.726390, lng: 127.162593, title: "소정면 맹골경로당", phone: "044-301-6044", type: "housing", capacity: 62 },
+{ lat: 36.721027, lng: 127.157721, title: "소정면 소정1리 경로당", phone: "044-301-6044", type: "housing", capacity: 76 },
+{ lat: 36.706271, lng: 127.145875, title: "소정면 운당2리 경로당", phone: "044-301-6044", type: "housing", capacity: 67 },
+{ lat: 36.722268, lng: 127.158276, title: "소정면사무소", phone: "044-301-6044", type: "housing", capacity: 130 },
+{ lat: 36.720949, lng: 127.159161, title: "소정초등학교", phone: "044-566-6064", type: "housing", capacity: 482 },
+{ lat: 36.514293, lng: 127.190017, title: "송문리 할머니 경로당", phone: "044-301-5644", type: "housing", capacity: 164 },
+{ lat: 36.637803, lng: 127.216938, title: "송성3리 마을회관", phone: "044-301-5944", type: "housing", capacity: 203 },
+{ lat: 36.542997, lng: 127.228346, title: "수산리 마을회관", phone: "044-301-5242", type: "housing", capacity: 158 },
+{ lat: 36.6035446, lng: 127.2882317, title: "신봉초등학교", phone: "044-902-1482", type: "housing", capacity: 682 },
+{ lat: 36.627991, lng: 127.286064, title: "신안2리 경로당", phone: "044-301-5172", type: "housing", capacity: 50 },
+{ lat: 36.593739, lng: 127.285853, title: "신흥e편한세상경로당", phone: "044-301-5172", type: "housing", capacity: 50 },
+{ lat: 36.668039, lng: 127.191206, title: "신흥리 경로당", phone: "044-301-5844", type: "housing", capacity: 65 },
+{ lat: 36.594075, lng: 127.289751, title: "신흥주공아파트경로당", phone: "044-301-5172", type: "housing", capacity: 142 },
+{ lat: 36.592329, lng: 127.289632, title: "신흥푸르지오경로당", phone: "044-301-5172", type: "housing", capacity: 70 },
+{ lat: 36.59754, lng: 127.2086, title: "쌍류초등학교", phone: "044-863-1929", type: "housing", capacity: 846 },
+{ lat: 36.578272, lng: 127.279631, title: "쌍전리마을회관", phone: "044-301-5743", type: "housing", capacity: 29 },
+{ lat: 36.5130392, lng: 127.2451009, title: "아름고등학교", phone: "044-902-6418", type: "housing", capacity: 941 },
+{ lat: 36.5122026, lng: 127.2492858, title: "아름동 복합커뮤니티센터", phone: "044-301-6388", type: "housing", capacity: 290 },
+{ lat: 36.5146391, lng: 127.2516270, title: "아름중학교", phone: "044-902-1054", type: "housing", capacity: 616 },
+{ lat: 36.5146391, lng: 127.2516270, title: "아름초등학교", phone: "044-998-1845", type: "housing", capacity: 570 },
+{ lat: 36.519489, lng: 127.262781, title: "양지고등학교", phone: "044-903-2006", type: "housing", capacity: 877 },
+{ lat: 36.519822, lng: 127.263226, title: "양지중학교", phone: "044-903-3017", type: "housing", capacity: 877 },
+{ lat: 36.518488, lng: 127.260442, title: "양지초등학교", phone: "044-902-4402", type: "housing", capacity: 620 },
+{ lat: 36.501942, lng: 127.256208, title: "어진동 복합커뮤니티센터", phone: "044-301-7514", type: "housing", capacity: 1925 },
+{ lat: 36.497969, lng: 127.254982, title: "어진중학교", phone: "044-410-0705", type: "housing", capacity: 714 },
+{ lat: 36.5156071, lng: 127.2627999, title: "연동중학교", phone: "044-864-7021", type: "housing", capacity: 832 },
+{ lat: 36.476126, lng: 127.285123, title: "여울초등학교", phone: "044-999-6173", type: "housing", capacity: 806 },
+{ lat: 36.544372, lng: 127.274341, title: "연기1리마을회관", phone: "044-301-5242", type: "housing", capacity: 31 },
+{ lat: 36.543472, lng: 127.277976, title: "연남초등학교", phone: "044-863-4504", type: "housing", capacity: 496 },
+{ lat: 36.555344, lng: 127.327421, title: "연동면 복합커뮤니티센터", phone: "044-301-5344", type: "housing", capacity: 509 },
+{ lat: 36.560142, lng: 127.326819, title: "연동초등학교", phone: "044-864-9380", type: "housing", capacity: 311 },
+{ lat: 36.559870, lng: 127.326950, title: "연봉초등학교", phone: "044-867-7024", type: "housing", capacity: 724 },
+{ lat: 36.592561, lng: 127.271468, title: "연서면사무소", phone: "044-301-5743", type: "housing", capacity: 159 },
+{ lat: 36.580574, lng: 127.257915, title: "연서중학교", phone: "044-902-0905", type: "housing", capacity: 902 },
+{ lat: 36.582841, lng: 127.254008, title: "연서초등학교", phone: "044-867-7024", type: "housing", capacity: 591 },
+{ lat: 36.505287259482, lng: 127.27210888754, title: "연세초등학교", phone: "", type: "housing", capacity: 0 },
+{ lat: 36.505496, lng: 127.271613, title: "연세초등학교", phone: "044-860-6500", type: "housing", capacity: 497 },
+{ lat: 36.503093, lng: 127.256265, title: "연양초등학교", phone: "044-410-3813", type: "housing", capacity: 529 },
+{ lat: 36.451232, lng: 127.263809, title: "영곡1리 경로당", phone: "044-301-5515", type: "housing", capacity: 78 },
+{ lat: 36.576574, lng: 127.308446, title: "예양2리 마을회관", phone: "044-301-5344", type: "housing", capacity: 80 },
+{ lat: 36.4833221, lng: 127.3020014, title: "온빛초등학교", phone: "044-903-3779", type: "housing", capacity: 860 },
+{ lat: 36.559126, lng: 127.259286, title: "와촌1리마을회관", phone: "044-301-5743", type: "housing", capacity: 26 },
+{ lat: 36.593790, lng: 127.274390, title: "월하1리마을회관", phone: "044-301-5743", type: "housing", capacity: 115 },
+{ lat: 36.584797, lng: 127.283328, title: "월하2리마을회관", phone: "044-301-5743", type: "housing", capacity: 26 },
+{ lat: 36.676279, lng: 127.173546, title: "유천1리경로당", phone: "044-301-5844", type: "housing", capacity: 60 },
+{ lat: 36.509679, lng: 127.231048, title: "으뜸초등학교", phone: "044-903-2507", type: "housing", capacity: 666 },
+{ lat: 36.679652, lng: 127.205456, title: "읍내리마을회관", phone: "044-301-5844", type: "housing", capacity: 55 },
+{ lat: 36.553450, lng: 127.339018, title: "응암2리마을회관", phone: "044-301-5344", type: "housing", capacity: 75 },
+{ lat: 36.5485611, lng: 127.1903173, title: "의랑초등학교", phone: "044-852-6872", type: "housing", capacity: 412 },
+{ lat: 36.589872, lng: 127.289881, title: "자이아파트경로당", phone: "044-301-5172", type: "housing", capacity: 163 },
+{ lat: 36.5202035, lng: 127.2241066, title: "장군면사무소", phone: "044-301-5644", type: "housing", capacity: 194 },
+{ lat: 36.5248536, lng: 127.2223264, title: "장기중학교", phone: "044-998-3147", type: "housing", capacity: 751 },
+{ lat: 36.5258496, lng: 127.2219758, title: "장기초등학교", phone: "070-4716-3132", type: "housing", capacity: 886 },
+{ lat: 36.5735987, lng: 127.2593319, title: "전동면 복합커뮤니티센터", phone: "044-301-5944", type: "housing", capacity: 766 },
+{ lat: 36.655902, lng: 127.268480, title: "전동분회 경로당", phone: "044-301-5944", type: "housing", capacity: 75 },
+{ lat: 36.5781332, lng: 127.2621944, title: "전동초등학교", phone: "044-863-1209", type: "housing", capacity: 400 },
+{ lat: 36.5835107, lng: 127.2719525, title: "전의면 복합커뮤니티센터", phone: "044-301-5844", type: "housing", capacity: 580 },
+{ lat: 36.5838375, lng: 127.2719512, title: "전의면사무소", phone: "044-301-5844", type: "housing", capacity: 185 },
+{ lat: 36.584948, lng: 127.274746, title: "전의중학교", phone: "044-863-3201", type: "housing", capacity: 978 },
+{ lat: 36.5841296, lng: 127.2738931, title: "전의초등학교", phone: "044-863-1450", type: "housing", capacity: 580 },
+{ lat: 36.592591, lng: 127.289467, title: "조치원읍 복합커뮤니티센터", phone: "044-301-5067", type: "housing", capacity: 423 },
+{ lat: 36.591388, lng: 127.290373, title: "조치원읍사무소", phone: "044-301-5172", type: "housing", capacity: 165 },
+{ lat: 36.635308, lng: 36.635308, title: "조형아파트경로당", phone: "044-301-5172", type: "housing", capacity: 34 },
+{ lat: 36.6008969, lng: 127.2882319, title: "종촌고등학교", phone: "044-903-2111", type: "housing", capacity: 804 },
+{ lat: 36.601627, lng: 127.287823, title: "종촌동 복합커뮤니티센터", phone: "044-301-6415", type: "housing", capacity: 1372 },
+{ lat: 36.600572, lng: 127.288872, title: "종촌중학교", phone: "044-903-3220", type: "housing", capacity: 737 },
+{ lat: 36.602163, lng: 127.288711, title: "종촌초등학교", phone: "044-903-3607", type: "housing", capacity: 640 },
+{ lat: 36.610778, lng: 127.287363, title: "집현중학교", phone: "044-902-9660", type: "housing", capacity: 586 },
+{ lat: 36.610195, lng: 127.286109, title: "집현초등학교", phone: "044-902-6770", type: "housing", capacity: 767 },
+{ lat: 36.606352, lng: 127.281289, title: "참샘초등학교", phone: "044-902-3704", type: "housing", capacity: 660 },
+{ lat: 36.603128, lng: 127.278541, title: "한솔고등학교", phone: "044-410-4106", type: "housing", capacity: 706 },
+{ lat: 36.605663, lng: 127.280586, title: "한솔동 복합커뮤니티센터", phone: "044-301-6144", type: "housing", capacity: 284 },
+{ lat: 36.600679, lng: 127.277998, title: "한솔중학교", phone: "044-902-8823", type: "housing", capacity: 923 },
+{ lat: 36.603062, lng: 127.278430, title: "한솔초등학교", phone: "044-410-4303", type: "housing", capacity: 718 },
+    { lat: 36.599119, lng: 127.274503, title: "해밀동 복합커뮤니티센터", phone: "044-301-7415", type: "housing", capacity: 1077 }
+      ];
+
+      markerData.forEach(data => {
+        const marker = new google.maps.Marker({
+          position: { lat: data.lat, lng: data.lng },
+          map: map,
+          title: data.title,
+          icon: data.type === "shelter" ? shelterIcon : housingIcon
+        });
+
+        const infoWindow = new google.maps.InfoWindow({
+          content: `<div><strong>${data.title}</strong><br>전화: ${data.phone}<br>${data.capacity ? "수용인원: " + data.capacity + "명<br>" : ""}<button onclick="routeTo(${data.lat}, ${data.lng}, 'driving')">경로 안내</button></div>`
+        });
+
+        marker.addListener("click", () => {
+          if (activeInfoWindow) activeInfoWindow.close();
+          infoWindow.open(map, marker);
+          activeInfoWindow = infoWindow;
+        });
+
+        staticMarkers.push({ ...data, marker });
+      });
+
+      visibleMarkers = [...staticMarkers];
+
+      const input = document.getElementById("search-input");
+      const searchBox = new google.maps.places.SearchBox(input);
+      map.addListener("bounds_changed", () => searchBox.setBounds(map.getBounds()));
+      searchBox.addListener("places_changed", () => {
+        const places = searchBox.getPlaces();
+        if (!places.length) return;
+        const place = places[0];
+        setUserPosition(place.geometry.location.lat(), place.geometry.location.lng(), userIcon);
+      });
+
+      function getDistance(lat1, lon1, lat2, lon2) {
+        const R = 6371;
+        const dLat = (lat2 - lat1) * Math.PI / 180;
+        const dLon = (lon2 - lon1) * Math.PI / 180;
+        const a =
+          Math.sin(dLat / 2) ** 2 +
+          Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+          Math.sin(dLon / 2) ** 2;
+        return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+      }
+
+      window.setUserPosition = function(lat, lng, icon) {
+        userPosition = { lat, lng };
+        if (userMarker) userMarker.setMap(null);
+        userMarker = new google.maps.Marker({
+          position: userPosition, map: map,
+          icon: icon || userIcon, title: "내 위치"
+        });
+        map.setCenter(userPosition);
+        map.setZoom(15);
+        showNearestPlace();
+      };
+
+      window.goToMyLocation = function() {
+        if (navigator.geolocation) {
+          navigator.geolocation.getCurrentPosition(
+            pos => setUserPosition(pos.coords.latitude, pos.coords.longitude, userIcon),
+            () => alert("위치 정보를 가져올 수 없습니다.")
+          );
+        }
+      };
+
+      window.showNearestPlace = function() {
+        if (!userPosition || visibleMarkers.length === 0) return;
+        let nearest = null;
+        let nearestDistance = Infinity;
+
+        visibleMarkers.forEach(item => {
+          const dist = getDistance(userPosition.lat, userPosition.lng, item.lat, item.lng);
+          if (dist < nearestDistance) {
+            nearestDistance = dist;
+            nearest = item;
+          }
+        });
+
+        if (nearest) {
+          if (activeInfoWindow) activeInfoWindow.close();
+          const nearestInfo = new google.maps.InfoWindow({
+            content: `<div style="font-size:14px;"><strong>가장 가까운 장소</strong><br>${nearest.title}<br>${nearestDistance.toFixed(2)} km<br><button onclick="routeTo(${nearest.lat}, ${nearest.lng}, 'driving')">경로 안내</button></div>`
+          });
+          nearestInfo.open(map, nearest.marker);
+          activeInfoWindow = nearestInfo;
+        }
+      };
+
+      window.routeTo = function(destLat, destLng, mode) {
+        if (!userPosition) return alert("먼저 내 위치를 설정하세요.");
+        window.open(`https://www.google.com/maps/dir/?api=1&origin=${userPosition.lat},${userPosition.lng}&destination=${destLat},${destLng}&travelmode=${mode}`, "_blank");
+      };
+
+      window.filterMarkers = function(type) {
+        visibleMarkers = [];
+        staticMarkers.forEach(item => {
+          if (type === "all" || item.type === type) {
+            item.marker.setMap(map);
+            visibleMarkers.push(item);
+          } else {
+            item.marker.setMap(null);
+          }
+        });
+        showNearestPlace();
+      };
+    }
+  </script>
+</head>
+<body>
+  <div class="app-container">
+    <div id="map"></div>
+    <div class="bottom-controls">
+      <input id="search-input" class="search-input" type="text" placeholder="장소 검색..." />
+      <button class="btn" onclick="goToMyLocation()">📍</button>
+    </div>
+    <div class="filter-controls">
+      <button class="btn" onclick="filterMarkers('all')">전체</button>
+      <button class="btn" onclick="filterMarkers('shelter')">대피소</button>
+      <button class="btn" onclick="filterMarkers('housing')">거주지</button>
+    </div>
+  </div>
+  <script async
+    src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDVDq8Q6BjuH_64JQNu8VYhOCZb2y-jEBo&callback=initMap&libraries=places">
+  </script>
+</body>
+</html>
